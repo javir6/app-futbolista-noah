@@ -389,8 +389,8 @@ st.markdown("""
 <div class="main-header">
   <div style="font-size:3.5rem">⚽</div>
   <div>
-    <div class="subtitle">Temporada 2024-25</div>
-    <h1>NOAH FC · STATS</h1>
+    <div class="subtitle">Temporada 25/26</div>
+    <h1>NOAH · STATS</h1>
   </div>
 </div>
 """, unsafe_allow_html=True)
@@ -820,6 +820,6 @@ with tab_editar:
 # Footer
 st.markdown("---")
 st.markdown(
-    '<div style="text-align:center;color:#334155;font-size:0.75rem;letter-spacing:1px">NOAH FC STATS · Hecho con ❤️</div>',
+    '<div style="text-align:center;color:#334155;font-size:0.75rem;letter-spacing:1px">NOAH STATS · Hecho con ❤️</div>',
     unsafe_allow_html=True
 )
