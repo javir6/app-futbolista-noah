@@ -11,7 +11,7 @@ from plotly.subplots import make_subplots
 # CONFIGURACIÓN
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="Noah FC · Stats",
+    page_title="Noah · Stats",
     page_icon="⚽",
     layout="wide",
     initial_sidebar_state="collapsed",
