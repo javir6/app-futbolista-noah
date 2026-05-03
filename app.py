@@ -258,8 +258,7 @@ def temporada_de_fecha(fecha) -> str:
 
 
 def default_date_for_season(season_str: str) -> date:
-    """Devuelve una fecha representativa dentro de la temporada (1 de enero del segundo año)."""
-    # season_str p.ej. "25/26" -> año de inicio = 2025
+    """Fecha representativa dentro de la temporada (1 de enero del segundo año)."""
     start_year = 2000 + int(season_str[:2])
     return date(start_year + 1, 1, 1)
 
@@ -292,7 +291,7 @@ def color_nota(n: float) -> str:
 # ─────────────────────────────────────────────
 df_all = cargar_datos()
 
-# Temporadas fijas (siempre visibles)
+# Temporadas fijas
 TEMPORADAS_FIJAS = ["25/26", "26/27", "27/28", "28/29", "29/30"]
 
 # ── HEADER ────────────────────────────────────
@@ -312,7 +311,7 @@ with sc1:
     temporada_sel = st.selectbox(
         "🗓️ Temporada",
         options=TEMPORADAS_FIJAS,
-        index=0,  # 25/26
+        index=0,
         help="Filtra todos los datos por temporada (julio - junio).",
     )
 with sc2:
@@ -369,22 +368,27 @@ with tab_dashboard:
         nota_media  = round(notas_temp.mean(), 1)
         c_nota_med  = color_nota(nota_media)
 
-        # KPI cards (dos filas de 5)
+        # Definimos las 10 tarjetas KPI en el orden pedido
         kpis = [
-            ("Partidos", f"{partidos}", f"{titulares} titular(es)"),
-            ("Goles", f"{goles_total}", f"⌀ {goles_avg}/partido"),
-            ("Asistencias", f"{asistencias}", ""),
-            ("Minutos", f"{minutos_total}'", f"⌀ {int(minutos_avg)}'/partido"),
+            ("Partidos jugados", f"{partidos}", f"{titulares} titular(es)"),
+            ("Titular", f"{titulares}", ""),
+            ("Minutos totales", f"{minutos_total}'", ""),
+            ("Media min/partido", f"{int(minutos_avg)}'", "por partido"),
             ("Pases buenos", f"{pases_avg}", "por partido"),
             ("Pérdidas", f"{perdidas_avg}", "por partido"),
             ("Recuperaciones", f"{recup_avg}", "por partido"),
             ("Despejes", f"{despejes_avg}", "por partido"),
+            ("Goles", f"{goles_total}", f"⌀ {goles_avg}/partido"),
+            ("Asistencias", f"{asistencias}", ""),
         ]
 
-        # Nota media en tarjeta aparte, más grande
-        cols = st.columns(5)
+        # Primera fila: 5 tarjetas, segunda fila: 5 tarjetas
+        cols1 = st.columns(5)
+        cols2 = st.columns(5)
+
         for i, (label, value, sub) in enumerate(kpis):
-            with cols[i % 5]:
+            col = cols1[i] if i < 5 else cols2[i - 5]
+            with col:
                 st.markdown(f"""
                 <div class="kpi-card">
                   <div class="kpi-label">{label}</div>
@@ -392,13 +396,9 @@ with tab_dashboard:
                   <div class="kpi-sub">{sub}</div>
                 </div>""", unsafe_allow_html=True)
 
-        # Segunda fila si es necesario (ya hemos puesto 8, en dos filas de 5 y 3)
-        # pero nuestra lista tiene 8 elementos; la última fila quedará con 3 tarjetas.
-        # Lo dejamos así.
-
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Nota media (destacada)
+        # Nota media (tarjeta ancha)
         st.markdown(f"""
         <div class="kpi-card" style="border-color: {c_nota_med};">
           <div class="kpi-label">Nota media de la temporada</div>
@@ -432,32 +432,60 @@ with tab_dashboard:
             )
             st.plotly_chart(fig_radar, use_container_width=True)
 
-        # ── Notas por partido + línea de media ───────────────────────────
+        # ── Notas por partido (más vistoso) ────────────────────────────
         st.markdown('<div class="section-title">NOTA POR PARTIDO</div>', unsafe_allow_html=True)
         df_notas = df.copy()
         df_notas["nota"] = df_notas.apply(nota_rendimiento, axis=1)
         df_notas["fecha_str"] = df_notas["fecha"].dt.strftime("%d/%m")
 
         fig_notas = go.Figure()
+
+        # Barras con escala de color continua
         fig_notas.add_trace(go.Bar(
-            x=df_notas["fecha_str"], y=df_notas["nota"],
-            marker_color=df_notas["nota"].apply(color_nota),
-            text=df_notas["nota"], textposition="outside",
+            x=df_notas["fecha_str"],
+            y=df_notas["nota"],
+            marker=dict(
+                color=df_notas["nota"],
+                colorscale='RdYlGn',          # rojo (bajo) → verde (alto)
+                cmin=0,
+                cmax=10,
+                colorbar=dict(
+                    title="Nota",
+                    tickvals=[0, 5, 10],
+                    ticktext=['0', '5', '10'],
+                    thickness=15,
+                    outlinewidth=0
+                ),
+                line=dict(width=1, color='rgba(255,255,255,0.3)')
+            ),
+            text=df_notas["nota"],
+            textposition="outside",
+            textfont=dict(color='white', size=11),
             customdata=df_notas["oponente"],
             hovertemplate="<b>vs %{customdata}</b><br>Nota: %{y}<extra></extra>",
-            name="Nota partido",
+            name="Nota",
         ))
-        fig_notas.add_trace(go.Scatter(
-            x=df_notas["fecha_str"], y=[nota_media] * len(df_notas),
-            mode="lines", name=f"Media temporada: {nota_media}",
-            line=dict(color="#f0c040", width=2, dash="dash"),
-        ))
+
+        # Línea horizontal de la nota media
+        fig_notas.add_hline(
+            y=nota_media,
+            line_dash="dash",
+            line_color="#f0c040",
+            line_width=2,
+            annotation_text=f"Media: {nota_media}",
+            annotation_position="top right",
+            annotation_font=dict(color="#f0c040", size=12)
+        )
+
         fig_notas.update_layout(
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(13,21,37,0.6)",
-            font=dict(color="#94a3b8", size=11), legend=dict(bgcolor="rgba(0,0,0,0)"),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(13,21,37,0.6)",
+            font=dict(color="#94a3b8", size=11),
             yaxis=dict(range=[0, 11], gridcolor="#1e293b"),
             xaxis=dict(gridcolor="#1e293b"),
-            margin=dict(l=0, r=0, t=10, b=0), height=300,
+            margin=dict(l=0, r=0, t=10, b=0),
+            height=350,
+            showlegend=False
         )
         st.plotly_chart(fig_notas, use_container_width=True)
 
@@ -488,12 +516,11 @@ with tab_partidos:
         elif filtro_tit == "Suplente":
             df_filtrado = df_filtrado[df_filtrado["titular"] == 0]
 
-        # Calcular nota y ordenar por fecha (más reciente primero)
         df_filtrado = df_filtrado.copy()
         df_filtrado["nota"] = df_filtrado.apply(nota_rendimiento, axis=1)
         df_filtrado = df_filtrado.sort_values("fecha", ascending=False).reset_index(drop=True)
 
-        # Mostrar la nota media de los partidos mostrados
+        # Nota media de la temporada
         if not df_filtrado.empty:
             nota_media_partidos = round(df_filtrado["nota"].mean(), 1)
             c_nota_media_partidos = color_nota(nota_media_partidos)
@@ -508,7 +535,6 @@ with tab_partidos:
             </div>
             """, unsafe_allow_html=True)
 
-        # Tabla
         df_show = df_filtrado[[
             "fecha","oponente","titular","minutos","goles","asistencias",
             "pases_buenos","perdidas","recuperaciones","tiros",
@@ -547,7 +573,6 @@ with tab_nuevo:
     if "form_reset" not in st.session_state:
         st.session_state.form_reset = 0
 
-    # Fecha por defecto centrada en la temporada seleccionada
     fecha_default = default_date_for_season(temporada_sel)
 
     with st.form(key=f"nuevo_partido_{st.session_state.form_reset}", clear_on_submit=True):
@@ -618,7 +643,7 @@ with tab_editar:
             temp_editar = st.selectbox(
                 "Temporada a editar",
                 options=["Todas"] + TEMPORADAS_FIJAS,
-                index=1,  # primera temporada (25/26)
+                index=1,
                 key="temp_editar"
             )
 
