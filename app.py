@@ -537,14 +537,28 @@ with tab_partidos:
         elif filtro_tit == "Suplente":
             df_filtrado = df_filtrado[df_filtrado["titular"] == 0]
 
-        # Calcular nota ANTES de tocar columnas y ANTES de convertir fecha a string
+        # Calcular nota y ordenar por fecha (más reciente primero)
         df_filtrado = df_filtrado.copy()
         df_filtrado["nota"] = df_filtrado.apply(nota_rendimiento, axis=1)
-
-        # Ordenar por fecha (datetime real) — más reciente primero
         df_filtrado = df_filtrado.sort_values("fecha", ascending=False).reset_index(drop=True)
 
-        # Ahora sí: convertir a string para mostrar
+        # --- AÑADIDO: Mostrar la nota media de los partidos mostrados ---
+        if not df_filtrado.empty:
+            nota_media_partidos = round(df_filtrado["nota"].mean(), 1)
+            c_nota_media_partidos = color_nota(nota_media_partidos)
+            st.markdown(f"""
+            <div style="background:#0d1525;border:1px solid #1e293b;border-radius:12px;
+                        padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:16px">
+              <span style="font-size:1.1rem;color:#cbd5e0;">⭐ Nota media de la temporada:</span>
+              <span style="font-family:'Bebas Neue',cursive;font-size:2rem;color:{c_nota_media_partidos};">
+                {nota_media_partidos}
+              </span>
+              <span style="color:#94a3b8;font-size:0.85rem;">/ 10 · basado en {len(df_filtrado)} partido(s)</span>
+            </div>
+            """, unsafe_allow_html=True)
+        # ---------------------------------------------------------------
+
+        # Construir tabla para mostrar
         df_show = df_filtrado[[
             "fecha","oponente","titular","minutos","goles","asistencias",
             "pases_buenos","perdidas","recuperaciones","tiros",
