@@ -257,6 +257,13 @@ def temporada_de_fecha(fecha) -> str:
         return f"{str(ts.year - 1)[2:]}/{str(ts.year)[2:]}"
 
 
+def default_date_for_season(season_str: str) -> date:
+    """Devuelve una fecha representativa dentro de la temporada (1 de enero del segundo año)."""
+    # season_str p.ej. "25/26" -> año de inicio = 2025
+    start_year = 2000 + int(season_str[:2])
+    return date(start_year + 1, 1, 1)
+
+
 def nota_rendimiento(row) -> float:
     nota = 5.0
     nota += row["goles"] * 1.5
@@ -285,14 +292,8 @@ def color_nota(n: float) -> str:
 # ─────────────────────────────────────────────
 df_all = cargar_datos()
 
-# Temporadas disponibles (más reciente primero)
-if not df_all.empty:
-    temporadas_disponibles = sorted(
-        df_all["fecha"].apply(temporada_de_fecha).unique(),
-        reverse=True
-    )
-else:
-    temporadas_disponibles = [temporada_de_fecha(date.today())]
+# Temporadas fijas (siempre visibles)
+TEMPORADAS_FIJAS = ["25/26", "26/27", "27/28", "28/29", "29/30"]
 
 # ── HEADER ────────────────────────────────────
 st.markdown("""
@@ -310,8 +311,8 @@ sc1, sc2 = st.columns([1, 4])
 with sc1:
     temporada_sel = st.selectbox(
         "🗓️ Temporada",
-        options=temporadas_disponibles,
-        index=0,
+        options=TEMPORADAS_FIJAS,
+        index=0,  # 25/26
         help="Filtra todos los datos por temporada (julio - junio).",
     )
 with sc2:
@@ -325,11 +326,11 @@ with sc2:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# DataFrame filtrado por temporada (usado en Dashboard y Partidos)
+# DataFrame filtrado por temporada
 if not df_all.empty:
     df = df_all[df_all["fecha"].apply(temporada_de_fecha) == temporada_sel].copy().reset_index(drop=True)
 else:
-    df = df_all.copy()
+    df = _df_vacio()
 
 # ─────────────────────────────────────────────
 # TABS
@@ -354,112 +355,63 @@ with tab_dashboard:
 
         partidos        = len(df)
         titulares       = int(df["titular"].sum())
-        goles           = int(df["goles"].sum())
+        goles_total     = int(df["goles"].sum())
+        goles_avg       = round(goles_total / partidos, 2) if partidos else 0
         asistencias     = int(df["asistencias"].sum())
-        minutos         = int(df["minutos"].sum())
-        media_min       = round(df["minutos"].mean(), 0)
-        participaciones = goles + asistencias
-        media_pases     = round(df["pases_buenos"].mean(), 1)
+        minutos_total   = int(df["minutos"].sum())
+        minutos_avg     = round(minutos_total / partidos, 0) if partidos else 0
+        pases_avg       = round(df["pases_buenos"].mean(), 1) if partidos else 0
+        perdidas_avg    = round(df["perdidas"].mean(), 1) if partidos else 0
+        recup_avg       = round(df["recuperaciones"].mean(), 1) if partidos else 0
+        despejes_avg    = round(df["despejes"].mean(), 1) if partidos else 0
 
-        # Nota media de la temporada
         notas_temp  = df.apply(nota_rendimiento, axis=1)
         nota_media  = round(notas_temp.mean(), 1)
         c_nota_med  = color_nota(nota_media)
 
-        # 7 KPI cards
-        k1, k2, k3, k4, k5, k6, k7 = st.columns(7)
-        kpis_std = [
-            (k1, partidos,        "Partidos",     f"{titulares} como titular"),
-            (k2, goles,           "Goles",         f"⌀ {round(goles/partidos,2)}/partido"),
-            (k3, asistencias,     "Asistencias",   f"⌀ {round(asistencias/partidos,2)}/partido"),
-            (k4, participaciones, "G+A",           "Participaciones"),
-            (k5, f"{minutos}'",   "Minutos",       f"⌀ {int(media_min)}' por partido"),
-            (k6, media_pases,     "Pases/partido", f"{int(df['recuperaciones'].sum())} recuperaciones"),
+        # KPI cards (dos filas de 5)
+        kpis = [
+            ("Partidos", f"{partidos}", f"{titulares} titular(es)"),
+            ("Goles", f"{goles_total}", f"⌀ {goles_avg}/partido"),
+            ("Asistencias", f"{asistencias}", ""),
+            ("Minutos", f"{minutos_total}'", f"⌀ {int(minutos_avg)}'/partido"),
+            ("Pases buenos", f"{pases_avg}", "por partido"),
+            ("Pérdidas", f"{perdidas_avg}", "por partido"),
+            ("Recuperaciones", f"{recup_avg}", "por partido"),
+            ("Despejes", f"{despejes_avg}", "por partido"),
         ]
-        for col, val, label, sub in kpis_std:
-            with col:
+
+        # Nota media en tarjeta aparte, más grande
+        cols = st.columns(5)
+        for i, (label, value, sub) in enumerate(kpis):
+            with cols[i % 5]:
                 st.markdown(f"""
                 <div class="kpi-card">
                   <div class="kpi-label">{label}</div>
-                  <div class="kpi-value">{val}</div>
+                  <div class="kpi-value">{value}</div>
                   <div class="kpi-sub">{sub}</div>
                 </div>""", unsafe_allow_html=True)
 
-        # Nota media (color dinámico)
-        with k7:
-            st.markdown(f"""
-            <div class="kpi-card">
-              <div class="kpi-label">Nota media</div>
-              <div class="kpi-value-nota" style="color:{c_nota_med}">{nota_media}</div>
-              <div class="kpi-sub">sobre 10 · {partidos} partidos</div>
-            </div>""", unsafe_allow_html=True)
+        # Segunda fila si es necesario (ya hemos puesto 8, en dos filas de 5 y 3)
+        # pero nuestra lista tiene 8 elementos; la última fila quedará con 3 tarjetas.
+        # Lo dejamos así.
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ── Último partido ────────────────────────────────────────────────
-        ultimo    = df.iloc[-1]
-        nota_ult  = nota_rendimiento(ultimo)
-        c_nota_u  = color_nota(nota_ult)
-        tit_str   = "Titular ✅" if ultimo["titular"] == 1 else "Suplente"
+        # Nota media (destacada)
         st.markdown(f"""
-        <div style="background:#0d1525;border:1px solid #1e293b;border-radius:14px;padding:18px 24px;margin-bottom:20px;">
-          <span style="color:#8899aa;font-size:0.72rem;letter-spacing:1.5px;text-transform:uppercase">ÚLTIMO PARTIDO</span>
-          <div style="display:flex;align-items:center;gap:24px;margin-top:8px;flex-wrap:wrap">
-            <div>
-              <span style="font-family:'Bebas Neue',cursive;font-size:1.5rem;color:#f0f0f0">
-                {fmt_fecha(ultimo['fecha'])} · vs {ultimo['oponente']}
-              </span>
-              <span style="margin-left:12px;font-size:0.78rem;color:#64b3f4">{tit_str} · {int(ultimo['minutos'])}'</span>
-            </div>
-            <div style="margin-left:auto;text-align:center">
-              <div style="font-size:0.7rem;color:#8899aa;letter-spacing:1px">NOTA</div>
-              <div style="font-family:'Bebas Neue',cursive;font-size:2.2rem;color:{c_nota_u}">{nota_ult}</div>
-            </div>
-            <div style="display:flex;gap:20px;flex-wrap:wrap">
-              <div style="text-align:center"><div style="font-size:1.5rem">⚽</div><div style="color:#f0f0f0;font-weight:700">{int(ultimo['goles'])}</div></div>
-              <div style="text-align:center"><div style="font-size:1.5rem">🤝</div><div style="color:#f0f0f0;font-weight:700">{int(ultimo['asistencias'])}</div></div>
-              <div style="text-align:center"><div style="font-size:1.5rem">✅</div><div style="color:#f0f0f0;font-weight:700">{int(ultimo['pases_buenos'])}</div></div>
-              <div style="text-align:center"><div style="font-size:1.5rem">🔄</div><div style="color:#f0f0f0;font-weight:700">{int(ultimo['recuperaciones'])}</div></div>
-            </div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+        <div class="kpi-card" style="border-color: {c_nota_med};">
+          <div class="kpi-label">Nota media de la temporada</div>
+          <div class="kpi-value-nota" style="color:{c_nota_med}">{nota_media}</div>
+          <div class="kpi-sub">sobre 10 · {partidos} partidos</div>
+        </div>""", unsafe_allow_html=True)
 
-        # ── Gráficos ──────────────────────────────────────────────────────
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Gráfico radar ──────────────────────────────────────────────
         col_izq, col_der = st.columns([3, 2])
-
-        with col_izq:
-            st.markdown('<div class="section-title">EVOLUCIÓN</div>', unsafe_allow_html=True)
-            metricas_ev = {
-                "Goles": "goles", "Asistencias": "asistencias",
-                "Pases buenos": "pases_buenos", "Pérdidas": "perdidas",
-                "Recuperaciones": "recuperaciones",
-            }
-            sel = st.multiselect(
-                "Métricas", list(metricas_ev.keys()),
-                default=["Goles", "Asistencias"],
-                label_visibility="collapsed"
-            )
-            if sel:
-                fig = go.Figure()
-                fechas_str = df["fecha"].dt.strftime("%d/%m")
-                for i, m in enumerate(sel):
-                    fig.add_trace(go.Scatter(
-                        x=fechas_str, y=df[metricas_ev[m]],
-                        mode="lines+markers", name=m,
-                        line=dict(color=COLORES_PLOTLY[i % len(COLORES_PLOTLY)], width=2),
-                        marker=dict(size=7),
-                    ))
-                fig.update_layout(
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(13,21,37,0.6)",
-                    font=dict(color="#94a3b8", size=11), legend=dict(bgcolor="rgba(0,0,0,0)"),
-                    hovermode="x unified", margin=dict(l=0, r=0, t=10, b=0), height=300,
-                    xaxis=dict(gridcolor="#1e293b"), yaxis=dict(gridcolor="#1e293b"),
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
         with col_der:
-            st.markdown('<div class="section-title">RADAR</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-title">RADAR DE RENDIMIENTO</div>', unsafe_allow_html=True)
             radar_cats = ["Goles", "Asistencias", "Pases", "Recuperaciones", "Tiros", "Despejes"]
             cols_radar = ["goles","asistencias","pases_buenos","recuperaciones","tiros","despejes"]
             maximos    = [max(df[c].max(), 1) for c in cols_radar]
@@ -495,7 +447,6 @@ with tab_dashboard:
             hovertemplate="<b>vs %{customdata}</b><br>Nota: %{y}<extra></extra>",
             name="Nota partido",
         ))
-        # Línea de nota media
         fig_notas.add_trace(go.Scatter(
             x=df_notas["fecha_str"], y=[nota_media] * len(df_notas),
             mode="lines", name=f"Media temporada: {nota_media}",
@@ -542,7 +493,7 @@ with tab_partidos:
         df_filtrado["nota"] = df_filtrado.apply(nota_rendimiento, axis=1)
         df_filtrado = df_filtrado.sort_values("fecha", ascending=False).reset_index(drop=True)
 
-        # --- AÑADIDO: Mostrar la nota media de los partidos mostrados ---
+        # Mostrar la nota media de los partidos mostrados
         if not df_filtrado.empty:
             nota_media_partidos = round(df_filtrado["nota"].mean(), 1)
             c_nota_media_partidos = color_nota(nota_media_partidos)
@@ -556,9 +507,8 @@ with tab_partidos:
               <span style="color:#94a3b8;font-size:0.85rem;">/ 10 · basado en {len(df_filtrado)} partido(s)</span>
             </div>
             """, unsafe_allow_html=True)
-        # ---------------------------------------------------------------
 
-        # Construir tabla para mostrar
+        # Tabla
         df_show = df_filtrado[[
             "fecha","oponente","titular","minutos","goles","asistencias",
             "pases_buenos","perdidas","recuperaciones","tiros",
@@ -597,12 +547,15 @@ with tab_nuevo:
     if "form_reset" not in st.session_state:
         st.session_state.form_reset = 0
 
+    # Fecha por defecto centrada en la temporada seleccionada
+    fecha_default = default_date_for_season(temporada_sel)
+
     with st.form(key=f"nuevo_partido_{st.session_state.form_reset}", clear_on_submit=True):
         col_a, col_b = st.columns(2)
 
         with col_a:
             st.markdown("##### 📋 Información del partido")
-            f_fecha        = st.date_input("📅 Fecha", value=date.today(), format="DD/MM/YYYY")
+            f_fecha        = st.date_input("📅 Fecha", value=fecha_default, format="DD/MM/YYYY")
             f_oponente     = st.text_input("🆚 Oponente", placeholder="Nombre del equipo rival")
             f_titular      = st.checkbox("⚪ Titular en este partido", value=True)
             f_minutos      = st.number_input("⏱️ Minutos jugados", 0, 120, 0, 1)
@@ -624,7 +577,6 @@ with tab_nuevo:
             f_amarillas = st.number_input("🟨 Tarjetas amarillas", 0, 2, 0, 1)
             f_rojas     = st.number_input("🟥 Tarjetas rojas", 0, 1, 0, 1)
 
-        # Indicar temporada que se asignará según la fecha elegida
         temp_nueva = temporada_de_fecha(f_fecha)
         st.info(f"📅 Este partido se guardará en la temporada **{temp_nueva}**")
 
@@ -665,8 +617,8 @@ with tab_editar:
         with ed_c1:
             temp_editar = st.selectbox(
                 "Temporada a editar",
-                options=["Todas"] + list(temporadas_disponibles),
-                index=1 if temporadas_disponibles else 0,
+                options=["Todas"] + TEMPORADAS_FIJAS,
+                index=1,  # primera temporada (25/26)
                 key="temp_editar"
             )
 
@@ -678,7 +630,6 @@ with tab_editar:
         if df_ed.empty:
             st.markdown('<div class="info-box">No hay partidos en esta selección.</div>', unsafe_allow_html=True)
         else:
-            # Más reciente primero
             df_ed_sorted = df_ed.sort_values("fecha", ascending=False).reset_index(drop=True)
 
             opciones_ed = [
@@ -695,7 +646,6 @@ with tab_editar:
 
             partido = df_ed_sorted.iloc[idx_display]
 
-            # Localizar índice real en df_all
             mask = (
                 (df_all["fecha"] == partido["fecha"]) &
                 (df_all["oponente"] == partido["oponente"])
@@ -703,7 +653,7 @@ with tab_editar:
             idx_real_list = df_all[mask].index.tolist()
             idx_real = idx_real_list[0] if idx_real_list else None
 
-            # Botón eliminar
+            # Eliminar
             col_del, _ = st.columns([1, 4])
             with col_del:
                 if st.button("🗑️ Eliminar este partido", type="secondary", use_container_width=True):
